@@ -1,0 +1,10 @@
+NoMount kernel sources imported from:
+  https://github.com/maxsteeel/nomount
+
+Pinned upstream commit:
+  c7f63e3feb4125d591b6969a33aac04feb40f8ba (master/dev, 2026-10-06)
+
+Only the upstream kernel/src subtree is vendored. The userspace CLI and
+metamodule packaging are separate from this kernel integration. The local
+Kconfig requires KEYS, and the build version suffix is pinned to the upstream
+commit count (500) rather than counting commits in the parent kernel tree.

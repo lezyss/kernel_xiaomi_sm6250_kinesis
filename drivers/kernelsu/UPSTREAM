@@ -1,0 +1,13 @@
+KernelSU kernel sources imported from:
+  https://github.com/backslashxx/KernelSU
+
+Pinned upstream commit:
+  93895d54b62f08bb51db9b4be24982ffd8c2576a (master, 2026-10-07)
+
+Only the upstream kernel/ subtree is vendored. The upstream setup.sh is omitted
+because this kernel tree is wired to the vendored source directly.
+
+For the 4.14 miatoll target, CONFIG_KSU_TAMPER_SYSCALL_TABLE is disabled and
+the corresponding manual hooks are wired into fs/exec.c, fs/open.c, fs/stat.c,
+and kernel/reboot.c. They are guarded off when the KSU table or branch-link
+hook modes are selected.

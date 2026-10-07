@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Check out kernel
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Install build dependencies
         run: |
@@ -42,8 +42,22 @@ jobs:
           mkdir -p out
           scripts/ci/build-kernel.sh 2>&1 | tee out/build.log
 
+      - name: Annotate build failure
+        if: failure()
+        shell: bash
+        run: |
+          if [ -f out/build.log ]; then
+            tail -n 80 out/build.log > out/failure-tail.txt
+            python3 - <<'PYTHON'
+          from pathlib import Path
+          text = Path("out/failure-tail.txt").read_text(errors="replace")
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Kernel build log (last 80 lines)::{text}")
+          PYTHON
+          fi
+
       - name: Upload flashable ZIP and checksum
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: Kinesis-miatoll-AnyKernel3-${{ github.run_number }}
           path: |
@@ -66,7 +80,7 @@ jobs:
 
       - name: Upload build diagnostics
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: miatoll-build-diagnostics-${{ github.run_number }}
           path: out/diagnostics/

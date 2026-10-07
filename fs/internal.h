@@ -64,6 +64,7 @@ extern char *copy_mount_string(const void __user *);
 
 extern struct vfsmount *lookup_mnt(const struct path *);
 extern int finish_automount(struct vfsmount *, struct path *);
+extern int path_umount(struct path *path, int flags);
 
 extern int sb_prepare_remount_readonly(struct super_block *);
 

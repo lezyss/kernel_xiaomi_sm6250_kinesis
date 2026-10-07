@@ -1,0 +1,88 @@
+name: Build miatoll kernel
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - '16'
+      - 'arena/228868a0-kernel-xiaomi-sm6250-kinesis'
+    paths-ignore:
+      - '**/*.md'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Kinesis / miatoll / AnyKernel3
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Check out kernel
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison build-essential ca-certificates flex git libelf-dev \
+            libssl-dev libtinfo5 python3 unzip xz-utils zip
+
+      - name: Build kernel and recovery ZIP
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p out
+          scripts/ci/build-kernel.sh 2>&1 | tee out/build.log
+
+      - name: Annotate build failure
+        if: failure()
+        shell: bash
+        run: |
+          if [ -f out/build.log ]; then
+            tail -n 80 out/build.log > out/failure-tail.txt
+            python3 - <<'PYTHON'
+          from pathlib import Path
+          text = Path("out/failure-tail.txt").read_text(errors="replace")
+          text = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Kernel build log (last 80 lines)::{text}")
+          PYTHON
+          fi
+
+      - name: Upload flashable ZIP and checksum
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Kinesis-miatoll-AnyKernel3-${{ github.run_number }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+            dist/build-info.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+      - name: Collect build diagnostics
+        if: always()
+        run: |
+          mkdir -p out/diagnostics
+          for file in out/build.log out/.config out/include/config/kernel.release; do
+            if [ -f "$file" ]; then
+              cp "$file" "out/diagnostics/$(basename "$file" | sed 's/^\.//')"
+            fi
+          done
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: miatoll-build-diagnostics-${{ github.run_number }}
+          path: out/diagnostics/
+          if-no-files-found: warn
+          retention-days: 14

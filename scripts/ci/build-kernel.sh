@@ -57,6 +57,7 @@ grep -qx '# CONFIG_KSU_TAMPER_SYSCALL_TABLE is not set' "$OUT/.config"
 # The installer intentionally does not replace vendor modules.
 if grep -q '=m$' "$OUT/.config"; then
     echo 'Loadable modules enabled: add a module installation strategy before packaging.' >&2
+    grep '=m$' "$OUT/.config" >&2
     exit 1
 fi
 

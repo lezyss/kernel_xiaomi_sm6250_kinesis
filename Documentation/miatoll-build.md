@@ -5,6 +5,8 @@ The workflow `.github/workflows/build-kernel.yml` builds
 (the unified recovery/ROM codename is **miatoll**). Do not use the generic
 `defconfig`, `stock_defconfig`, or the Qualcomm reference-board defconfigs.
 KernelSU manual hooks and NoMount remain enabled; the build checks this.
+BIC and HTCP congestion control are built-in rather than their Kconfig module
+defaults, so the package does not need to install additional kernel modules.
 
 ## GitHub Actions
 

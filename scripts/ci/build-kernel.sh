@@ -47,7 +47,7 @@ clang --version
 make "${make_args[@]}" "$DEFCONFIG"
 
 # Do not silently ship a build without the existing root/NoMount integration.
-for option in CONFIG_ARCH_ATOLL CONFIG_BUILD_ARM64_DT_OVERLAY CONFIG_KSU CONFIG_NOMOUNT; do
+for option in CONFIG_ARCH_ATOLL CONFIG_BUILD_ARM64_DT_OVERLAY CONFIG_KSU CONFIG_NOMOUNT CONFIG_KSU_SUSFS; do
     grep -qx "${option}=y" "$OUT/.config" || {
         echo "Required option ${option}=y is missing from the resolved config" >&2
         exit 1

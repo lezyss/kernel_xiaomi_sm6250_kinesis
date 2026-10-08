@@ -20,6 +20,10 @@
 
 #include "kernel_includes.h"
 
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 // selinux includes
 #include "avc_ss.h"
 #include "objsec.h"
@@ -240,6 +244,10 @@ static int __init kernelsu_init(void)
 	ksu_feature_init();
 
 	ksu_supercalls_init();
+
+#ifdef CONFIG_KSU_SUSFS
+	susfs_init();
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 	ksu_sucompat_init(); // so the feature is registered
 

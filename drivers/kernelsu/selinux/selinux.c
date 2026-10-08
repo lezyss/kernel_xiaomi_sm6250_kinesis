@@ -15,6 +15,13 @@ static u32 cached_zygote_sid __read_mostly = 0;
 static u32 cached_init_sid __read_mostly = 0;
 u32 ksu_file_sid __read_mostly = 0;
 
+#ifdef CONFIG_KSU_SUSFS
+/* SuSFS SIDs: KSU domain (AVC log spoofing) and priv_app (AVC spoof target) */
+u32 susfs_ksu_sid __read_mostly = 0;
+u32 susfs_priv_app_sid __read_mostly = 0;
+#define SUSFS_PRIV_APP_CONTEXT "u:r:priv_app:s0:c512,c768"
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 static int transive_to_domain(const char *domain, struct cred *cred, bool clear_exec_sid)
 {
 	u32 sid;
@@ -156,7 +163,34 @@ void cache_sid(void)
 	} else {
 		pr_info("Cached ksu_file SID: %u\n", ksu_file_sid);
 	}
+
+#ifdef CONFIG_KSU_SUSFS
+	susfs_set_batch_sid();
+#endif // #ifdef CONFIG_KSU_SUSFS
 }
+
+#ifdef CONFIG_KSU_SUSFS
+static void susfs_set_sid(const char *secctx_name, u32 *out_sid)
+{
+	int err = security_secctx_to_secid(secctx_name, strlen(secctx_name), out_sid);
+
+	if (err) {
+		pr_err("failed setting sid for '%s', err: %d\n", secctx_name, err);
+		*out_sid = 0;
+	}
+}
+
+void susfs_set_batch_sid(void)
+{
+	susfs_set_sid(KERNEL_SU_CONTEXT, &susfs_ksu_sid);
+	susfs_set_sid(SUSFS_PRIV_APP_CONTEXT, &susfs_priv_app_sid);
+}
+
+bool susfs_is_current_ksu_domain(void)
+{
+	return is_ksu_domain();
+}
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 /*
  * Fast path: compare task's SID directly against cached value.

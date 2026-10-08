@@ -37,4 +37,9 @@ void setup_ksu_cred();
 
 void escape_to_root_for_adb_root();
 
+#ifdef CONFIG_KSU_SUSFS
+void susfs_set_batch_sid(void);
+bool susfs_is_current_ksu_domain(void);
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 #endif

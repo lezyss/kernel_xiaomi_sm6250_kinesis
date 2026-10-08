@@ -1,3 +1,9 @@
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#include <linux/workqueue.h>
+extern struct work_struct susfs_extra_works;
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 static __always_inline void ksu_handle_setresuid_cred(struct cred *new, const struct cred *old)
 {
 	if (!new || !old)
@@ -20,6 +26,18 @@ static __always_inline void ksu_handle_setresuid_cred(struct cred *new, const st
 
 	if (ksu_is_allow_uid_for_current(new_uid))
 		goto kill_seccomp;
+
+#ifdef CONFIG_KSU_SUSFS
+	// SuSFS: a zygote child that KSU wants umounted gets TIF_PROC_UMOUNTED, which is what the
+	// SUS_PATH/SUS_MOUNT/SUS_KSTAT/SUS_MAP/OPEN_REDIRECT hooks key on. Independent of whether
+	// any module is mounted (v2.3.0 semantics). Deferred extra work runs off the setuid path.
+	if (is_zygote(old) && (is_isolated_process(new_uid) ||
+			(is_appuid(new_uid) && ksu_uid_should_umount(new_uid)))) {
+		susfs_set_current_proc_umounted();
+		if (!work_pending(&susfs_extra_works))
+			schedule_work(&susfs_extra_works);
+	}
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 	// Handle kernel umount
 	ksu_handle_umount(new, old);

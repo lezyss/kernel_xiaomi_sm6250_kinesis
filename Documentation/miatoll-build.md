@@ -5,6 +5,9 @@ The workflow `.github/workflows/build-kernel.yml` builds
 (the unified recovery/ROM codename is **miatoll**). Do not use the generic
 `defconfig`, `stock_defconfig`, or the Qualcomm reference-board defconfigs.
 KernelSU manual hooks and NoMount remain enabled; the build checks this.
+SuSFS v2.3.0 (backported from the `gki-android12-5.10` branch of susfs4ksu to
+this 4.14 tree) is built in via `CONFIG_KSU_SUSFS` and its sub-options; see
+"SuSFS on this kernel" below.
 BIC and HTCP congestion control are built-in rather than their Kconfig module
 defaults, so the package does not need to install additional kernel modules.
 
@@ -80,3 +83,33 @@ KernelSU/NoMount apps. Existing root modifications are not guaranteed to coexist
 with KernelSU. Standard AnyKernel3 AVB handling is used; no vbmeta partition
 image is included. Never flash this ZIP on another device or assume it is safe
 merely because its codename passed the check.
+
+## SuSFS on this kernel
+
+`drivers/kernelsu/Kconfig` (menu "KernelSU - SUSFS") carries the v2.3.0 option set:
+`CONFIG_KSU_SUSFS`, `_SUS_PATH`, `_SUS_MOUNT`, `_SUS_KSTAT`, `_SPOOF_UNAME`,
+`_ENABLE_LOG`, `_HIDE_KSU_SUSFS_SYMBOLS`, `_SPOOF_CMDLINE_OR_BOOTCONFIG`,
+`_OPEN_REDIRECT` and `_SUS_MAP`. The miatoll defconfig enables all of them, and
+`scripts/ci/build-kernel.sh` refuses to build without `CONFIG_KSU_SUSFS=y`.
+
+Porting notes for the 4.14 target (the upstream patch targets GKI 5.10):
+
+- `/proc/bootconfig` does not exist on 4.14, so the SPOOF_CMDLINE_OR_BOOTCONFIG
+  hook spoofs `/proc/cmdline` instead (the non-GKI equivalent named by the option).
+- KernelSU's sucompat for `faccessat`/`stat` is reached through SuSFS's kernel-side
+  `struct filename` path only when `CONFIG_KSU_SUSFS=y`. Without SuSFS the existing
+  manual hooks in `fs/open.c`, `fs/stat.c` and `kernel/reboot.c` are used unchanged.
+- execve sucompat keeps the existing manual hook in `fs/exec.c` in both configurations.
+  SuSFS's per-zygote-child umount marking is done from KernelSU's `task_fix_setuid`
+  path (`hook/setuid_hook.c`), where the umount decision already lives.
+- SuSFS's inline init.rc read/fstat hooks and its input-event hook are not used:
+  KernelSU here delivers init.rc injection through the `security_file_permission`
+  LSM hook and safe mode through its own input handler.
+- The SELinux "fake policy" hiding (`fake_state`/`fake_status`) from the upstream
+  KernelSU patch is not ported; KernelSU's own `selinux_hide` feature is unchanged.
+  AVC log spoofing (`CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING`) is ported.
+- The SuSFS userspace (`ksu_susfs`, `ksu_module_susfs`) is not part of this tree.
+
+Verification in this repository is compile-level only (the change was
+object-compiled with and without SuSFS, and the KernelSU/NoMount objects compiled in
+both configurations). Nothing here has been run on a device.

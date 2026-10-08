@@ -31,6 +31,15 @@
 #include <linux/ima.h>
 #include <linux/dnotify.h>
 #include <linux/compat.h>
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif // #ifdef CONFIG_KSU_SUSFS
+
+#ifdef CONFIG_KSU_SUSFS
+extern bool ksu_su_compat_enabled;
+extern bool __ksu_is_allow_uid_for_current(uid_t uid);
+extern int ksu_handle_faccessat_kernel(int *dfd, struct filename **filename, int *mode);
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 #include "internal.h"
 
@@ -368,9 +377,12 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
 	struct vfsmount *mnt;
 	int res;
 	unsigned int lookup_flags = LOOKUP_FOLLOW;
+#ifdef CONFIG_KSU_SUSFS
+	struct filename *fname = NULL;
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 #if defined(CONFIG_KSU) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && \
-	!defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
+	!defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK) && !defined(CONFIG_KSU_SUSFS)
 	extern int ksu_handle_faccessat(int *, const char __user **, int *, int *);
 	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
 #endif
@@ -416,7 +428,30 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
 
 	old_cred = override_creds(override_cred);
 retry:
+#ifdef CONFIG_KSU_SUSFS
+	// SuSFS flow: resolve the kernel-side name first so KernelSU can rewrite it in place.
+	fname = getname_flags(filename, lookup_flags, NULL);
+	if (IS_ERR(fname)) {
+		res = PTR_ERR(fname);
+		goto out;
+	}
+
+	if (likely(susfs_is_current_proc_no_su()))
+		goto orig_flow;
+
+#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_TAMPER_SYSCALL_TABLE) && !defined(CONFIG_KSU_HACK_ARM64_BRANCH_LINK)
+	if (ksu_su_compat_enabled) {
+		if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val)))
+			ksu_handle_faccessat_kernel(&dfd, &fname, &mode);
+	}
+#endif
+
+orig_flow:
+	res = filename_lookup(dfd, fname, lookup_flags, &path, NULL);
+	// no putname(fname) here as filename_lookup() has it done for us already
+#else
 	res = user_path_at(dfd, filename, lookup_flags, &path);
+#endif
 	if (res)
 		goto out;
 

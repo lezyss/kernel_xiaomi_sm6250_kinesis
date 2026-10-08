@@ -213,3 +213,9 @@ static inline void global_filetable_delayed_print(struct mount *mnt)
 }
 
 #endif /* CONFIG_FILE_TABLE_DEBUG */
+
+#ifdef CONFIG_KSU_SUSFS
+/* shared with fs/open.c and fs/stat.c: SuSFS/KernelSU resolve a kernel-side struct filename */
+int filename_lookup(int dfd, struct filename *name, unsigned flags,
+		    struct path *path, struct path *root);
+#endif // #ifdef CONFIG_KSU_SUSFS

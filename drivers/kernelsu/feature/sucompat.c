@@ -7,7 +7,8 @@
 #define SU_PATH "/system/bin/su"
 #define SH_PATH "/system/bin/sh"
 
-static bool ksu_su_compat_enabled __read_mostly = true;
+// non-static: SuSFS VFS hooks (fs/open.c, fs/stat.c) read the gate directly
+bool ksu_su_compat_enabled __read_mostly = true;
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 static void __user *userspace_stack_buffer(const void *d, size_t len)
@@ -269,6 +270,45 @@ SUCOMPAT_HOOK_TYPE ksu_handle_stat(int *dfd, const char __user **filename_user, 
 	ksu_sucompat_user_common(filename_user, "sys_newfstatat");
 	return 0;
 }
+
+#ifdef CONFIG_KSU_SUSFS
+/*
+ * SuSFS entry points: the VFS hands us the kernel-side struct filename instead of a user
+ * pointer. Same decision as ksu_sucompat_user_common(): only SU_PATH is rewritten and only
+ * for allowed callers. faccessat/stat never escalate; they just get /system/bin/sh.
+ */
+static noinline void ksu_sucompat_kernel_to_sh(struct filename **filename_ptr, const char *syscall_name, char tag)
+{
+	struct filename *fname = *filename_ptr;
+
+	if (IS_ERR_OR_NULL(fname) || strcmp(fname->name, SU_PATH))
+		return;
+
+	write_sulog(tag);
+	pr_info("su_compat: %s su->sh!%s\n", syscall_name, (is_compat_task()) ? " [compat]" : "");
+	memcpy((void *)fname->name, SH_PATH, sizeof(SH_PATH));
+}
+
+// sys_faccessat (SuSFS flow)
+int ksu_handle_faccessat_kernel(int *dfd, struct filename **filename, int *mode)
+{
+	if (!is_su_allowed((const void **)filename))
+		return 0;
+
+	ksu_sucompat_kernel_to_sh(filename, "sys_faccessat", 'a');
+	return 0;
+}
+
+// sys_newfstatat, sys_fstat64 (SuSFS flow)
+int ksu_handle_stat_kernel(int *dfd, struct filename **filename, int *flags)
+{
+	if (!is_su_allowed((const void **)filename))
+		return 0;
+
+	ksu_sucompat_kernel_to_sh(filename, "sys_newfstatat", 's');
+	return 0;
+}
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 // sys_execve, compat_sys_execve
 SUCOMPAT_HOOK_TYPE ksu_handle_sys_execve(const char __user **filename_user, void *argv, void *envp)

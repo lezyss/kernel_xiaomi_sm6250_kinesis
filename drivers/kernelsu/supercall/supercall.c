@@ -78,10 +78,86 @@ bool ksu_is_su_session_fd(const struct file *filp)
 }
 
 // downstream: make sure to pass arg as reference, this can allow us to extend things.
+/*
+ * Return contract (kernel/reboot.c relies on it):
+ *   0       -> request fully handled here (SuSFS control command); reboot(2) returns 0.
+ *   nonzero -> not handled / KernelSU install or toolkit path; reboot(2) continues normally.
+ */
 int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
 {
 	if (magic1 != KSU_INSTALL_MAGIC1)
-		return 0;
+		return -EINVAL;
+
+#ifdef CONFIG_KSU_SUSFS
+	// SuSFS userspace (ksu_susfs) talks through reboot(2) with magic2 == SUSFS_MAGIC; root only.
+	if (magic2 == SUSFS_MAGIC && current_uid().val == 0) {
+		switch (cmd) {
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+		case CMD_SUSFS_ADD_SUS_PATH:
+			susfs_add_sus_path(arg);
+			return 0;
+		case CMD_SUSFS_ADD_SUS_PATH_LOOP:
+			susfs_add_sus_path_loop(arg);
+			return 0;
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+		case CMD_SUSFS_HIDE_SUS_MNTS_FOR_NON_SU_PROCS:
+			susfs_set_hide_sus_mnts_for_non_su_procs(arg);
+			return 0;
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+		case CMD_SUSFS_ADD_SUS_KSTAT:
+			susfs_add_sus_kstat(arg);
+			return 0;
+		case CMD_SUSFS_UPDATE_SUS_KSTAT:
+			susfs_update_sus_kstat(arg);
+			return 0;
+		case CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY:
+			susfs_add_sus_kstat(arg);
+			return 0;
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+		case CMD_SUSFS_SET_UNAME:
+			susfs_set_uname(arg);
+			return 0;
+#endif // #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
+		case CMD_SUSFS_ENABLE_LOG:
+			susfs_enable_log(arg);
+			return 0;
+#endif // #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
+#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+		case CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG:
+			susfs_set_cmdline_or_bootconfig(arg);
+			return 0;
+#endif // #ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+		case CMD_SUSFS_ADD_OPEN_REDIRECT:
+			susfs_add_open_redirect(arg);
+			return 0;
+#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+		case CMD_SUSFS_ADD_SUS_MAP:
+			susfs_add_sus_map(arg);
+			return 0;
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
+		case CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING:
+			susfs_set_avc_log_spoofing(arg);
+			return 0;
+		case CMD_SUSFS_SHOW_ENABLED_FEATURES:
+			susfs_get_enabled_features(arg);
+			return 0;
+		case CMD_SUSFS_SHOW_VARIANT:
+			susfs_show_variant(arg);
+			return 0;
+		case CMD_SUSFS_SHOW_VERSION:
+			susfs_show_version(arg);
+			return 0;
+		default:
+			return -EINVAL;
+		}
+	}
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 	// when ternary on fmt?
 	// cold syscall, we can splurge xD
@@ -103,11 +179,12 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 			ksu_close_fd(fd);
 		}
 
-		return 0;
+		// keep the original reboot(2) flow: the manager reads the fd back from arg
+		return -EINVAL;
 	}
 
 	toolkit_handle_sys_reboot(magic1, magic2, cmd, arg);
-	return 0;
+	return -EINVAL;
 }
 
 void __init ksu_supercalls_init(void)
